@@ -1,0 +1,74 @@
+import requests
+import time
+import json
+
+url = 'http://data.stats.gov.cn/easyquery.htm'
+popularity = '[{"wdcode":"zb","valuecode":"A0301"}]'
+city = '[{"wdcode":"zb","valuecode":"A0B01"}]'
+income_spending = '[{"wdcode":"zb","valuecode":"A0A02"}]'
+
+
+# 返回相应的参数值
+def SearchContent(content):
+    if type(content) == str:
+        if content == 'popularity':
+            return popularity
+        elif content == 'city':
+            return city
+        elif content == 'income_spending':
+            return income_spending
+    elif type(content) == int:
+        return '[{"wdcode":"sj","valuecode":"%d"}]' % (content,)
+
+
+# 爬虫类
+class reptile:
+    def __init__(self):
+        # 建立会话和头部、参数
+        self.session = requests.session()
+        self.header = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/73.0.3683.86 Safari/537.36'}
+        self.keys = {'m': 'QueryData', 'dbcode': 'hgnd', 'rowcode': 'zb', 'colcode': 'sj', 'wds': '[]', 'dfwds': '[]',
+                     'k1': str(int(round(time.time() * 1000)))}
+
+    # 从网页获取信息
+    def GetInfomation(self, content, years):
+        session = requests.session()
+        # 异常判断
+        if not years or not content or type(content) != str:
+            raise TypeError
+        result = []
+
+        self.keys['dfwds'] = SearchContent(content)
+        reply = session.post(url, params=self.keys, headers=self.header)
+        if reply.status_code != 200:
+            return -1
+
+        try:
+            for year in years:
+                self.keys['dfwds'] = SearchContent(year)
+                reply = session.post(url, params=self.keys, headers=self.header)
+                while True:
+                    try:
+                        js    = json.loads(reply.text)
+                        break
+                    except:
+                        print('network error')
+                        print(reply.text)
+                        time.sleep(0.5)
+                        session = requests.session()
+                        self.keys['dfwds'] = SearchContent(content)
+                        reply = session.post(url, params=self.keys, headers=self.header)
+                        self.keys['dfwds'] = SearchContent(year)
+                        reply = session.post(url, params=self.keys, headers=self.header)
+                KeyInfo = js['returndata']
+                data_dict_list = KeyInfo['datanodes']
+                description_dict_list = KeyInfo['wdnodes'][0]['nodes']
+                result_dict = {'year':str(year)}
+                for i in range(len(data_dict_list)):
+                    result_dict[ description_dict_list[i]['name'] ] = data_dict_list[i]['data']['strdata']
+                    result_dict['unit'] = description_dict_list[i]['unit']
+                result.append(result_dict)
+        except TypeError:
+            return
+
+        return result

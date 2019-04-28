@@ -1,0 +1,162 @@
+import sqlite3
+import sys
+import matplotlib.pyplot as plt
+from reptile import *
+
+
+# 数据库处理类
+class compute:
+    def __init__(self, BaseName):
+        self.name = BaseName + '.db'
+
+    # 建立新的表
+    def CreateNewTable(self, TableName, ListName):
+        conn = sqlite3.connect(self.name)
+        c = conn.cursor()
+        # 生成命令
+        command = 'CREATE TABLE %s (' % (TableName,)
+        for names in ListName:
+            if names == 'year':
+                command += "'%s' text primary key not null," % (names,)
+            else:
+                command += "'%s' text not null," % (names,)
+        command = command.strip(',')
+        command += ');'
+        # 执行命令
+        c.execute(command)
+        print('create database successfully')
+        conn.commit()
+        conn.close()
+
+    # 插入数据
+    def InsertInfo(self, TableName, DataList):
+        conn = sqlite3.connect(self.name)
+        c = conn.cursor()
+        # 获得列的名称
+        c.execute("PRAGMA table_info(%s)" % (TableName,))
+        structure = c.fetchall()
+        items = []
+        for contents in structure:
+            items.append(contents[1])
+        # 生成插入数据的命令，并插入数据
+        for datas in DataList:
+            item_string = "'" + str(items).strip('[').strip(']').replace("'", '').replace(',', "','") + "'"
+            item_string = item_string.replace(' ', '')
+            data_string = ''
+            for item in items:
+                data_string += "'" + datas[item] + "'" + ','
+            data_string = data_string.strip(',')
+            c.execute('INSERT INTO %s (%s) \
+                           VALUES (%s);' % (TableName, item_string, data_string))
+
+        conn.commit()
+        conn.close()
+        print('Insert Finished')
+
+    # 从数据库中获得数据
+    def GetData(self, TableName):
+        conn = sqlite3.connect(self.name)
+        c = conn.cursor()
+        # 从指定表中获得所有数据
+        c.execute("select * from %s;" % (TableName,))
+        datas = c.fetchall()
+        # 从指定表中获得列名称
+        c.execute("PRAGMA table_info(%s)" % (TableName,))
+        structure = c.fetchall()
+        items = [content[1] for content in structure]
+        conn.commit()
+        conn.close()
+        # 将所得的数据和列名称对应起来组成字典列表
+        Info = []
+        for data in datas:
+            Info.append(dict(zip(items, data)))
+        return Info
+
+
+
+if __name__ == '__main__':
+    s = reptile()
+    o = compute('1')
+
+    # 获得2007-2017年的个规模城市数目表
+    l = s.GetInfomation('city', [i for i in range(2007, 2017)])
+    if l == -1:
+        print('failed to connect')
+        sys.exit()
+    o.CreateNewTable('city', l[0].keys())
+    o.InsertInfo('city', l)
+    # 从数据库中读取该表
+    d1 = o.GetData('city')：
+
+    # 获得1999-2018年的人口数据，并存入数据库的表
+    l = s.GetInfomation('popularity', [i for i in range(1999, 2019)])
+    if l == -1:
+        print('failed to connect')
+        sys.exit()
+    o.CreateNewTable('popularity', l[0].keys())
+    o.InsertInfo('popularity', l)
+    # 从数据库中读取该表
+    d2 = o.GetData('popularity')
+
+    # 构建人口图
+    axes_Year2 = [int(data['year']) for data in d2]
+    axes_Allpeople = [int(data['年末总人口']) for data in d2]
+    axes_Male = [int(data['男性人口']) / int(data['年末总人口']) * 100 for data in d2]
+    axes_Female = [int(data['女性人口']) / int(data['年末总人口']) * 100 for data in d2]
+
+    # 构建2007-2016各规模城市数目折线图
+    axes_Year1 = [int(data['year']) for data in d1]
+    axes_Allcity = [int(data['全部地级及以上城市数']) for data in d1]
+    axes_Bigcity = [int(data['城市市辖区年末总人口为400万以上的地级及以上城市数']) for data in d1]
+    axes_Midcity = [int(data['城市市辖区年末总人口为200-400万的地级及以上城市数']) for data in d1]
+    axes_city_100 = [int(data['城市市辖区年末总人口为100-200万的地级及以上城市数']) for data in d1]
+    axes_city_50 = [int(data['城市市辖区年末总人口为50-100万的地级及以上城市数']) for data in d1]
+    axes_city_20 = [int(data['城市市辖区年末总人口为20-50万的地级及以上城市数']) for data in d1]
+    axes_city_0 = [int(data['城市市辖区年末总人口为20万以下的地级及以上城市数']) for data in d1]
+
+    #构建2007-2016十年城市数目变化饼状图
+    plt.figure(figsize=(6, 6))  # 将画布设定为正方形，则绘制的饼图是正圆
+    label = ['2007', '2008', '2009','2010', '2011', '2012','2013', '2014', '2015','2016']  # 定义饼图的标签，标签是列表
+    values = axes_Allcity
+    plt.pie(values, labels=label, autopct='%1.1f%%')  # 绘制饼图
+    plt.title('the change of city number between 2007-2016')  # 绘制标题
+    plt.show()
+
+    # 1999-2018年总人口变化条形图
+    plt.figure(2)
+    plt.title('the change of population of 1999 - 2018')
+    plt.xlabel('year')
+    plt.ylabel('population')
+    plt.bar(axes_Year2,  axes_Allpeople, 0.5)
+    plt.xticks(axes_Year2, rotation=45)
+    plt.show()
+
+    #1999-2018年男性和女性人口比例变化折线图
+    plt.figure(1)
+    plt.title('the male and female part of 1999 - 2018')
+    plt.plot(axes_Year2, axes_Male, label='Male')
+    plt.plot(axes_Year2, axes_Female, label='Female')
+    plt.xlabel('year')
+    plt.ylabel('sex')
+    plt.ylim((40, 60))
+    plt.xticks(axes_Year2, rotation=45)
+    plt.legend(loc='upper left')
+    plt.show()
+
+
+    # 图4，2007-2017年规模城市数量变化
+    plt.figure(4)
+    plt.title('the number of all kinds of cities between 1999 - 2017')
+    plt.xlabel('year')
+    plt.ylabel('city size')
+    plt.plot(axes_Year1, axes_Allcity, label='all cities')
+    plt.plot(axes_Year1, axes_Bigcity, label='more than 40 mil city')
+    plt.plot(axes_Year1, axes_Midcity, label='20-40 mil city')
+    plt.plot(axes_Year1, axes_city_100, label='10-20 mil city')
+    plt.plot(axes_Year1, axes_city_50, label='5-10 mil city')
+    plt.plot(axes_Year1, axes_city_20, label='0-5 mil city')
+    plt.plot(axes_Year1, axes_city_0, label='fewer than 2 mil city')
+    plt.xticks(axes_Year1, rotation=45)
+    plt.legend(loc='upper left')
+    plt.show()
+
